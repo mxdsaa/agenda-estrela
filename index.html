@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Agenda Estrela</title>
 <meta name="theme-color" content="#E88AA6">
 <meta name="description" content="Monte e baixe as folhas da sua agenda A5.">
@@ -15,11 +15,16 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,400;0,700;1,400;1,700&display=swap">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
 <header class="top">
-  <div class="brand"><img src="icon-192.png" alt="" width="32" height="32"><span>Agenda Estrela</span></div>
+  <div class="brand"><img src="icon-192.png" alt="" width="32" height="32"><span class="bname">Agenda Estrela</span>
+    <span class="sp"></span>
+    <span class="saved" id="saved">✓ Salvo</span>
+    <button type="button" class="ur" id="btnUndo" aria-label="Desfazer" title="Desfazer"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+    <button type="button" class="ur" id="btnRedo" aria-label="Refazer" title="Refazer"><svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+  </div>
   <nav class="steps" id="steps">
     <button type="button" data-step="1" class="on"><b>1</b><span>Frente e Verso</span></button>
     <button type="button" data-step="2"><b>2</b><span>Ano</span></button>
@@ -36,89 +41,57 @@
         <button type="button" data-side="verso">Verso</button>
       </div>
       <select id="fmtSel" aria-label="Formato">
-        <option value="1">1 dia por página</option>
-        <option value="2">2 dias por página</option>
+        <option value="1">1 dia/página</option>
+        <option value="2">2 dias/página</option>
       </select>
-    </div>
-    <details class="box" id="modelsBox">
-      <summary>Modelos prontos e arquivo ▾</summary>
-      <div class="inner">
-        <p class="lbl">Modelos prontos (vale para a folha que está aberta)</p>
-        <div class="row wrap" id="presets">
-          <button type="button" class="btn" data-preset="classico">Clássico</button>
-          <button type="button" class="btn" data-preset="lateral">Data grande lateral</button>
-          <button type="button" class="btn" data-preset="tarefas">Tarefas em cima</button>
-        </div>
-        <div class="row wrap">
-          <button type="button" class="btn" id="btnReset">Voltar ao padrão</button>
-          <button type="button" class="btn" id="btnCopySide">Copiar da outra folha</button>
-          <button type="button" class="btn danger" id="btnBlank">Começar do zero</button>
-        </div>
-        <p class="lbl">Arquivo</p>
-        <div class="row wrap">
-          <button type="button" class="btn" id="btnSaveJson">Salvar modelo</button>
-          <label class="btn">Abrir modelo<input type="file" id="fileJson" accept=".json,application/json" hidden></label>
-        </div>
-        <p class="hint">Seu trabalho fica salvo sozinho neste celular. “Salvar modelo” baixa um arquivo para guardar ou passar para outro aparelho.</p>
-      </div>
-    </details>
-
-    <div class="addbar" id="addbar">
-      <button type="button" class="hl" id="btnLib">✿ Elementos</button>
-      <label class="addimg hl2">🖼 Carregar mídia<input type="file" id="fileImg" accept="image/*" multiple hidden></label>
-      <button type="button" data-add="text">+ Texto</button>
-      <button type="button" data-add="date">+ Data</button>
-      <button type="button" data-add="hours">+ Horários</button>
-      <button type="button" data-add="tasks">+ Tarefas</button>
-      <button type="button" data-add="notes">+ Anotações</button>
-      <button type="button" data-add="holiday">+ Feriado</button>
-      <button type="button" data-add="footer">+ Rodapé</button>
-      <button type="button" data-add="shape">+ Forma</button>
-      <label class="addimg">Fundo da folha<input type="file" id="fileBg" accept="image/*" hidden></label>
-    </div>
-    <div class="lib" id="libPanel" hidden>
-      <div class="lib-top">
-        <input type="search" id="libSearch" placeholder="Buscar elemento (ex.: coração, café, washi)">
-        <button type="button" class="btn" id="libClose">Fechar</button>
-      </div>
-      <div class="lib-cats" id="libCats"></div>
-      <div class="lib-grid" id="libGrid"></div>
-    </div>
-
-    <div class="tools">
-      <button type="button" class="ic" id="btnUndo" aria-label="Desfazer">↶<small>Desfazer</small></button>
-      <button type="button" class="ic" id="btnRedo" aria-label="Refazer">↷<small>Refazer</small></button>
-      <span class="sp"></span>
       <button type="button" class="nextsm" data-go="2">Próximo ›</button>
-      <button type="button" class="ic" id="zOut" aria-label="Diminuir zoom">−</button>
-      <button type="button" class="zl" id="zFit">100%</button>
-      <button type="button" class="ic" id="zIn" aria-label="Aumentar zoom">+</button>
     </div>
 
-    <div class="stage-wrap" id="stageWrap">
-      <div class="stage" id="stage">
-        <canvas id="cv"></canvas>
-        <div class="sel" id="sel" hidden>
-          <div class="h h-rot" data-h="rot" title="Girar">⟳</div>
-          <div class="h h-res" data-h="res" title="Tamanho">⤡</div>
+    <div class="stage-area">
+      <div class="stage-wrap" id="stageWrap">
+        <div class="stage" id="stage">
+          <canvas id="cv"></canvas>
+          <div class="sel" id="sel" hidden>
+            <div class="h h-rot" data-h="rot" title="Girar"><svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></div>
+            <div class="h h-res" data-h="res" title="Tamanho"></div>
+            <div class="h h-rw" data-h="rw" title="Largura"></div>
+            <div class="h h-rh" data-h="rh" title="Altura"></div>
+            <span class="lockbadge">🔒</span>
+          </div>
+          <div class="mini nostage" id="mini" hidden></div>
+          <textarea class="ied nostage" id="ied" hidden spellcheck="false"></textarea>
         </div>
       </div>
+      <div class="multibar nostage" id="multiBar" hidden><span id="multiTxt">Toque nos itens para selecionar</span><button type="button" id="multiDone">Pronto</button></div>
+      <div class="zoom nostage">
+        <button type="button" id="zOut" aria-label="Diminuir zoom">−</button>
+        <button type="button" class="zl" id="zFit">100%</button>
+        <button type="button" id="zIn" aria-label="Aumentar zoom">+</button>
+      </div>
     </div>
-    <!-- Painel de edição (celular) -->
-<div class="sheet" id="sheet">
-  <div class="sheet-head">
-    <button type="button" class="grab" id="sheetToggle" aria-label="Abrir ou fechar painel"><span></span></button>
-    <div class="sheet-row"><div class="sheet-title" id="sheetTitle">Folha</div><button type="button" class="okbtn" id="btnDone">✓ Pronto</button></div>
-    <div class="tabs" id="tabs">
-      <button type="button" data-tab="texto" class="on">Texto</button>
-      <button type="button" data-tab="cor">Cor</button>
-      <button type="button" data-tab="pos">Posição</button>
-      <button type="button" data-tab="camadas">Camadas</button>
-    </div>
-  </div>
-  <div class="sheet-body" id="sheetBody"></div>
-</div>
 
+    <div class="ctxbar" id="ctxbar" hidden></div>
+
+    <nav class="mainbar" id="mainbar">
+      <button type="button" data-main="modelos"><i data-ic="modelos"></i><span>Modelos</span></button>
+      <button type="button" data-main="elementos"><i data-ic="elementos"></i><span>Elementos</span></button>
+      <button type="button" data-main="texto"><i data-ic="texto"></i><span>Texto</span></button>
+      <button type="button" data-main="midia"><i data-ic="midia"></i><span>Mídia</span></button>
+      <button type="button" data-main="fundo"><i data-ic="fundo"></i><span>Fundo</span></button>
+      <button type="button" data-main="agenda"><i data-ic="agenda"></i><span>Agenda</span></button>
+      <button type="button" data-main="camadas"><i data-ic="camadas"></i><span>Camadas</span></button>
+    </nav>
+
+    <div class="sheet closed" id="sheet">
+      <div class="sheet-head" id="sheetHead">
+        <div class="grab"><span></span></div>
+        <div class="sheet-row"><div class="sheet-title" id="sheetTitle"></div><button type="button" class="okbtn" id="btnDone">✓ Pronto</button></div>
+      </div>
+      <div class="sheet-body" id="sheetBody"></div>
+    </div>
+    <input type="file" id="fileImg" accept="image/*" multiple hidden>
+    <input type="file" id="fileBg" accept="image/*" hidden>
+    <input type="file" id="fileJson" accept=".json,application/json" hidden>
   </section>
 
   <!-- PASSO 2 -->
@@ -193,10 +166,15 @@
 </main>
 
 <div class="print-area" id="printArea"></div>
+<div class="cm-back" id="cmBack" hidden></div>
+<div class="cmenu" id="cmenu" hidden></div>
+<div class="modal" id="modal" hidden><div class="modal-box"><p id="modalMsg"></p><p class="hint" id="modalSub"></p><div class="modal-btns"><button type="button" class="btn" id="modalNo">Cancelar</button><button type="button" class="btn ok" id="modalYes">Continuar</button></div></div></div>
+<div class="tip" id="tip" hidden><p id="tipTxt"></p><div class="tip-btns"><button type="button" id="tipSkip">Pular dicas</button><button type="button" id="tipNext">Próxima</button></div><i class="tip-arrow" id="tipArrow"></i></div>
 <div class="toast" id="toast" hidden></div>
 
 <script src="jspdf.umd.min.js"></script>
-<script src="elements.js"></script>
-<script src="app.js"></script>
+<script src="elements.js?v=3"></script>
+<script src="templates.js?v=3"></script>
+<script src="app.js?v=3"></script>
 </body>
 </html>
