@@ -259,21 +259,51 @@
   add(H, "face-cool", "Tranquila", "0 0 100 100", face('<path fill="{2}" d="M18 34h28v8c0 8-6 12-14 12s-14-4-14-12zM54 34h28v8c0 8-6 12-14 12s-14-4-14-12z"/><path d="M46 38h8" stroke="{2}" stroke-width="4"/><path d="M34 68q16 10 32 0" fill="none" stroke="{2}" stroke-width="5" stroke-linecap="round"/>'), { c1: "#E8C468", c2: "#3a3340", tags: "humor óculos" });
   add(H, "face-cry", "Chorando", "0 0 100 100", face('<path d="M26 42q8-6 16 0M58 42q8-6 16 0" fill="none" stroke="{2}" stroke-width="5" stroke-linecap="round"/><path fill="#6FA3D8" d="M30 46h8v40h-8zM62 46h8v40h-8z" opacity=".8"/><path d="M38 72q12-8 24 0" fill="none" stroke="{2}" stroke-width="5" stroke-linecap="round"/>'), { c1: "#9EC3E6", c2: "#3d4a5a", tags: "humor triste" });
 
-  var CATS = [];
-  L.forEach(function (e) { if (CATS.indexOf(e.cat) < 0) CATS.push(e.cat); });
-  var BY = {};
-  L.forEach(function (e) { BY[e.id] = e; });
+  /* ---------- API ----------
+     Três grupos: "Ilustrações" (coloridas, da internet), "Decorados" (várias cores editáveis), "Básicos" (1 ou 2 cores).
+     Cores: {1}..{4} no SVG; cada item tem cols (cores padrão) e labels (nome de cada parte). */
+  L.forEach(function (e) { if (e.cat === "Estrelas e brilhos") e.cat = "Estrelas"; e.group = "Básicos"; e.cols = [e.c1, e.c2]; e.cats = [e.cat]; });
+  var CATS = [], BY = {}, GROUPS = { "Ilustrações": [], "Decorados": [], "Básicos": [] };
+  function idx(e) {
+    BY[e.id] = e;
+    e.cats.forEach(function (c) { if (CATS.indexOf(c) < 0) { CATS.push(c); (GROUPS[e.group] = GROUPS[e.group] || []).push(c); } });
+    if (!e.remote) {
+      var n = 0; for (var k = 1; k <= 4; k++) if (e.svg.indexOf("{" + k + "}") > -1) n = k;
+      e.n = n;
+    } else e.n = 0;
+  }
+  L.forEach(idx);
   function norm(s) { return (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""); }
+  var DEF_LABELS = ["Cor principal", "Cor 2", "Cor 3", "Cor 4"];
   window.ELEMENTOS = {
-    list: L, cats: CATS, byId: BY,
-    /* gera o texto SVG com as cores; w,h em px (para manter o formato do item) */
-    svg: function (id, c1, c2, w, h) {
-      var e = BY[id]; if (!e) return "";
-      var body = e.svg.replace(/\{1\}/g, c1 || e.c1).replace(/\{2\}/g, c2 || e.c2);
+    list: L, cats: CATS, byId: BY, groups: GROUPS,
+    add: function (e) {
+      e.cats = e.cats || [e.cat]; e.cat = e.cats[0]; e.vb = e.vb || "0 0 100 100"; e.tags = e.tags || "";
+      if (!e.remote) { e.cols = e.cols || ["#E88AA6", "#A88BD8"]; e.c1 = e.cols[0]; e.c2 = e.cols[1]; }
+      L.push(e); idx(e); return e;
+    },
+    /* nomes das partes que mudam de cor */
+    labels: function (id) { var e = BY[id]; if (!e) return []; var a = []; for (var i = 0; i < e.n; i++) a.push((e.labels && e.labels[i]) || (e.n === 1 ? "Cor" : DEF_LABELS[i])); return a; },
+    /* gera o texto SVG; cols = [c1,c2,c3,c4]; w,h em px */
+    svg: function (id, cols, w, h) {
+      var e = BY[id]; if (!e || e.remote) return "";
+      cols = cols || [];
+      var body = e.svg.replace(/\{([1-4])\}/g, function (m, k) { return cols[k - 1] || (e.cols && e.cols[k - 1]) || "#999999"; });
       var size = w && h ? ' width="' + Math.round(w) + '" height="' + Math.round(h) + '"' : "";
       return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="' + e.vb + '"' + size + ' preserveAspectRatio="' + (e.stretch ? "none" : "xMidYMid meet") + '">' + body + "</svg>";
     },
     aspect: function (id) { var v = BY[id].vb.split(/\s+/).map(Number); return v[2] / v[3]; },
-    search: function (q) { q = norm(q).trim(); if (!q) return L; return L.filter(function (e) { return norm(e.name + " " + e.cat + " " + e.tags).indexOf(q) > -1; }); }
+    norm: norm,
+    search: function (q) {
+      q = norm(q).trim(); if (!q) return L;
+      var words = q.split(/\s+/), a = [], b = [];
+      L.forEach(function (e) {
+        var hay = e._h || (e._h = norm(e.name + " " + e.cats.join(" ") + " " + e.tags + " " + e.group));
+        if (!words.every(function (w) { return hay.indexOf(w) > -1; })) return;
+        var nm = norm(e.name);
+        (nm.indexOf(words[0]) === 0 || (" " + nm).indexOf(" " + words[0]) > -1 ? a : b).push(e);
+      });
+      return a.concat(b);
+    }
   };
 })();

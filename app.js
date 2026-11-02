@@ -72,7 +72,7 @@
 
   /* ---------------- Projeto ---------------- */
   var DEF = {
-    base: { rot: 0, op: 1, font: "Quicksand", size: 11, color: "#555555", tColor: "#E88AA6", bold: false, italic: false, align: "left", lineColor: "#D9CFD5", lineStyle: "solid", lineW: 0.25, boxBg: null, boxBorder: "none", boxColor: "#E88AA6", flipH: false, flipV: false, lock: false, grp: null, ls: 0, lh: 1.25, bw: 0, bc: "#E88AA6", crop: null },
+    base: { rot: 0, op: 1, font: "Quicksand", size: 11, color: "#555555", tColor: "#E88AA6", bold: false, italic: false, align: "left", lineColor: "#D9CFD5", lineStyle: "solid", lineW: 0.25, boxBg: null, boxBorder: "none", boxColor: "#E88AA6", flipH: false, flipV: false, lock: false, grp: null, ls: 0, lh: 1.25, tgap: 1.2, bw: 0, bc: "#E88AA6", crop: null },
     text: { text: "Seu texto aqui", w: 70, h: 12, size: 14, color: "#555555" },
     date: { style: "extenso", template: "{semana}, {dia} de {mes}", showYear: false, upper: false, font: "Dancing Script", size: 22, color: "#E88AA6", bold: true, w: 130, h: 15 },
     hours: { title: "Horários", hfmt: "h", w: 62, h: 120, size: 8 },
@@ -85,10 +85,18 @@
   };
   function mk(type, p) {
     var e = Object.assign({ id: uid(), type: type, x: 20, y: 20 }, DEF.base, DEF[type], p || {});
-    if (type === "svg") { var it = EL.byId[e.lib]; if (it) { e.c1 = e.c1 || it.c1; e.c2 = e.c2 || it.c2; } }
+    if (type === "svg") { var it = EL.byId[e.lib]; if (it && !it.remote) setCols(e, it, true); }
     return e;
   }
 
+  /* cores do elemento: c1..c4 (só as partes que o desenho tem) */
+  var CKEYS = ["c1", "c2", "c3", "c4"];
+  function setCols(e, it, keep) {
+    CKEYS.forEach(function (k, i) {
+      if (it.remote || i >= Math.max(it.n, 2)) { if (i >= 2) delete e[k]; if (it.remote) delete e[k]; return; }
+      if (!keep || !e[k]) e[k] = (it.cols && it.cols[i]) || e[k];
+    });
+  }
   function preset(name, W, H) {
     var half = H < 150, k = H / 210, fs = half ? 0.78 : 1, els = [];
     function P(type, x, y, w, h, p) { p = p || {}; if (p.size) p.size = Math.round(p.size * fs * 10) / 10; els.push(mk(type, Object.assign({ x: x, y: y * k, w: w, h: h * k }, p))); }
@@ -131,13 +139,16 @@
         "1": { frente: newModel(148, 210, "classico"), verso: newModel(148, 210, "classico") },
         "2": { frente: newModel(148, 105, "classico"), verso: newModel(148, 105, "classico") }
       },
-      settings: { start: "2027-01-01", end: "2027-12-31", holidays: true, cutLine: true, slots: defaultSlots(), quality: "150" }
+      settings: { start: "2027-01-01", end: "2027-12-31", holidays: true, cutLine: true, slots: defaultSlots(), quality: "150", twoSides: false }
     };
   }
 
   var P = newProject();
   var ST = { side: "frente", sel: null, sels: [], zoom: 1, sheet: null, step: 1, fontOpen: false, libCat: null, multiMode: false, colorOpen: null, editId: null, guides: [], nudge: 1, alignMargin: true, replaceId: null };
-  function M() { return P.models[P.fmt][ST.side]; }
+  /* uma folha só (padrão). "Frente e verso diferentes" é opção avançada; desligada, o Verso é ignorado */
+  function twoS() { return !!(P && P.settings && P.settings.twoSides); }
+  function M() { return P.models[P.fmt][twoS() ? ST.side : "frente"]; }
+  function usedModels() { var mm = P.models[P.fmt]; return twoS() ? [mm.frente, mm.verso] : [mm.frente]; }
   function byId(id) { var m = M(); for (var i = 0; i < m.els.length; i++) if (m.els[i].id === id) return m.els[i]; return null; }
   function selEl() { return ST.sel ? byId(ST.sel) : null; }
   function selAll() { var m = M(), set = {}; ST.sels.forEach(function (id) { set[id] = 1; }); return m.els.filter(function (e) { return set[e.id]; }); }
@@ -204,10 +215,43 @@
     }
     return c;
   }
-  function svgKey(e) { var it = EL.byId[e.lib]; return e.lib + "|" + e.c1 + "|" + e.c2 + (it && it.stretch ? "|" + (e.w / e.h).toFixed(2) : ""); }
+  function svgKey(e) { var it = EL.byId[e.lib]; if (it && it.remote) return e.lib; return e.lib + "|" + e.c1 + "|" + e.c2 + "|" + (e.c3 || "") + "|" + (e.c4 || "") + (it && it.stretch ? "|" + (e.w / e.h).toFixed(2) : ""); }
+  /* ilustrações da internet: o SVG é baixado como texto (fica guardado no celular) e vira data: URL,
+     assim a imagem não "suja" o canvas e sai no PDF e na impressão */
+  var stkMem = {};
+  function stkText(it) {
+    if (stkMem[it.id]) return stkMem[it.id];
+    var p = idbGet("stk:" + it.id).catch(function () { return null; }).then(function (t) {
+      if (t) return t;
+      return fetch(it.url, { mode: "cors", credentials: "omit" }).then(function (r) { if (!r.ok) throw new Error("http " + r.status); return r.text(); }).then(function (t2) {
+        if (t2.indexOf("<svg") < 0) throw new Error("svg");
+        idbSet("stk:" + it.id, t2).catch(function () {});
+        return t2;
+      });
+    });
+    stkMem[it.id] = p;
+    p.catch(function () { setTimeout(function () { delete stkMem[it.id]; }, 8000); });
+    return p;
+  }
+  function sizedSvg(t, W, H) {
+    return t.replace(/<svg\b([^>]*)>/, function (m, a) { a = a.replace(/\s(width|height)="[^"]*"/g, ""); if (a.indexOf("xmlns=") < 0) a += ' xmlns="http://www.w3.org/2000/svg"'; return "<svg" + a + ' width="' + W + '" height="' + H + '">'; });
+  }
   function svgImg(e) {
     var it = EL.byId[e.lib]; if (!it) return null;
     var key = svgKey(e), c = svgCache[key];
+    if (it.remote) {
+      if (!c) {
+        c = svgCache[key] = { img: new Image(), ok: false, remote: true };
+        c.p = stkText(it).then(function (t) {
+          return new Promise(function (res) {
+            c.img.onload = function () { c.ok = true; res(); draw(); };
+            c.img.onerror = function () { c.bad = true; res(); };
+            c.img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(sizedSvg(t, 1000, 1000));
+          });
+        }).catch(function () { c.bad = true; setTimeout(function () { if (svgCache[key] === c) delete svgCache[key]; }, 8000); });
+      }
+      return c;
+    }
     if (!c) {
       var a = it.stretch ? e.w / e.h : EL.aspect(e.lib), W = a >= 1 ? 1000 : 1000 * a, H = a >= 1 ? 1000 / a : 1000;
       c = svgCache[key] = { img: new Image(), ok: false };
@@ -215,7 +259,7 @@
         c.img.onload = function () { c.ok = true; svgLast[e.lib] = c; res(); draw(); };
         c.img.onerror = res;
       });
-      c.img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(EL.svg(e.lib, e.c1, e.c2, W, H));
+      c.img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(EL.svg(e.lib, [e.c1, e.c2, e.c3, e.c4], W, H));
     }
     return c.ok ? c : (svgLast[e.lib] || c);
   }
@@ -236,6 +280,7 @@
   var CUR_LS = 0;
   function mT(ctx, s) { var w = ctx.measureText(s).width / TS; return CUR_LS ? w + CUR_LS * Math.max(0, Array.from(s).length - 1) : w; }
   function fT(ctx, s, x, y) {
+    if (DBG === "lines") return;
     ctx.save(); ctx.scale(1 / TS, 1 / TS); x *= TS; y *= TS;
     if (!CUR_LS) ctx.fillText(s, x, y);
     else Array.from(s).forEach(function (c) { ctx.fillText(c, x, y); x += ctx.measureText(c).width + CUR_LS * TS; });
@@ -270,6 +315,7 @@
     ctx.font = fontStr(e, fs);
     var tw = mT(ctx, txt);
     if (tw > w && tw > 0) { var k0 = w / tw; fs = fs * k0; CUR_LS *= k0; ctx.font = fontStr(e, fs); tw = mT(ctx, txt); }
+    if (fs * 1.1 > h && h > 0) { var k1 = h / (fs * 1.1); fs *= k1; CUR_LS *= k1; ctx.font = fontStr(e, fs); tw = mT(ctx, txt); }
     ctx.fillStyle = e.color; ctx.textBaseline = "middle";
     fT(ctx, txt, alignX(e, w, tw), h / 2);
   }
@@ -285,15 +331,18 @@
     });
     return out;
   }
+  /* espaço entre letras e linhas (mm) — as letras nunca encostam nas linhas */
+  function tg(e) { var g = e.tgap == null ? 1.2 : +e.tgap; return Math.max(0.3, Math.min(6, g)); }
+  var DBG = null; /* teste automático: "text" desenha só letras, "lines" só linhas */
   function blockTitle(ctx, e, w) {
     if (!e.title) return 0;
     var fs = e.size * PT * 1.12;
     ctx.font = fontStr(e, fs, true); ctx.fillStyle = e.tColor; ctx.textBaseline = "alphabetic";
     var tw = mT(ctx, e.title), x = alignX(e, w, tw);
-    fT(ctx, e.title, x, fs * 0.95);
-    return fs * 1.55;
+    fT(ctx, e.title, x, fs * 0.92);
+    return fs * 0.92 + fs * 0.3 + tg(e);
   }
-  function hline(ctx, e, x1, x2, y) { ctx.save(); ctx.strokeStyle = e.lineColor; ctx.lineWidth = e.lineW; dash(ctx, e.lineStyle, e.lineW); ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x2, y); ctx.stroke(); ctx.restore(); }
+  function hline(ctx, e, x1, x2, y) { if (DBG === "text" || x2 - x1 < 0.5) return; ctx.save(); ctx.strokeStyle = e.lineColor; ctx.lineWidth = e.lineW; dash(ctx, e.lineStyle, e.lineW); ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x2, y); ctx.stroke(); ctx.restore(); }
 
   function drawEl(ctx, e, data) {
     var w = e.w, h = e.h;
@@ -324,35 +373,40 @@
     } else if (t === "hours") {
       var top = blockTitle(ctx, e, w), labels = slotLabels(e), n = labels.length;
       if (n) {
-        var f = e.size * PT, avail = h - top, rowsFit = Math.max(1, Math.floor(avail / (f * 1.9))), cols = Math.min(3, Math.ceil(n / rowsFit)), rows = Math.ceil(n / cols), rowH = avail / rows;
-        if (rowH < f * 1.35) f = rowH / 1.35;
+        var g = tg(e), f = e.size * PT, avail = h - top, rowsFit = Math.max(1, Math.floor(avail / (f * 1.9))), cols = Math.min(3, Math.ceil(n / rowsFit)), rows = Math.ceil(n / cols), rowH = avail / rows;
+        /* a linha de cada horário: as letras ficam em cima dela, com folga, e a altura das letras cabe na fileira */
+        if (rowH < f * 0.8 + g + 0.5) f = Math.max(1.2, (rowH - g - 0.5) / 0.8);
         var gap = 3, cw = (w - gap * (cols - 1)) / cols;
         ctx.font = fontStr(e, f); ctx.fillStyle = e.color; ctx.textBaseline = "alphabetic";
+        /* coluna própria para o horário: a linha de escrever começa depois do texto */
+        var lw = 0; labels.forEach(function (lb) { lw = Math.max(lw, mT(ctx, lb)); });
+        var lgap = Math.max(1.5, g);
         labels.forEach(function (lb, i) {
           var c = Math.floor(i / rows), r = i % rows, x = c * (cw + gap), yb = top + (r + 1) * rowH;
-          fT(ctx, lb, x, yb - Math.max(0.6, rowH * 0.14));
-          hline(ctx, e, x, x + cw, yb);
+          fT(ctx, lb, x, yb - g);
+          hline(ctx, e, x + lw + lgap, x + cw, yb);
         });
       }
     } else if (t === "tasks") {
-      var tp = blockTitle(ctx, e, w), cnt = Math.max(1, e.count | 0), rh = (h - tp) / cnt, bx = Math.min(rh * 0.55, e.size * PT * 1.1);
+      var tp = blockTitle(ctx, e, w), cnt = Math.max(1, e.count | 0), rh = (h - tp) / cnt, tgt = tg(e), bx = Math.max(1, Math.min(rh * 0.55, e.size * PT * 1.1, rh - tgt - 0.4));
       for (var i = 0; i < cnt; i++) {
         var yb = tp + (i + 1) * rh;
-        ctx.save(); ctx.strokeStyle = e.tColor; ctx.lineWidth = 0.25; rr(ctx, 0.2, yb - bx - Math.max(0.6, rh * 0.15), bx, bx, bx * 0.2); ctx.stroke(); ctx.restore();
-        hline(ctx, e, bx + 1.5, w, yb);
+        if (DBG !== "text") { ctx.save(); ctx.strokeStyle = e.tColor; ctx.lineWidth = 0.25; rr(ctx, 0.2, yb - bx - tgt, bx, bx, bx * 0.2); ctx.stroke(); ctx.restore(); }
+        hline(ctx, e, bx + Math.max(1.5, tgt), w, yb);
       }
     } else if (t === "notes") {
       var tn = blockTitle(ctx, e, w), sp = Math.max(2, +e.spacing || 6);
       if (e.kind === "pontilhado") {
         ctx.fillStyle = e.lineColor;
         var r0 = Math.max(0.22, e.lineW * 1.1);
-        for (var yy = tn + sp / 2; yy <= h; yy += sp) for (var xx = sp / 2; xx <= w; xx += sp) { ctx.beginPath(); ctx.arc(xx, yy, r0, 0, 7); ctx.fill(); }
+        if (DBG !== "text") for (var yy = tn + sp / 2; yy <= h; yy += sp) for (var xx = sp / 2; xx <= w; xx += sp) { ctx.beginPath(); ctx.arc(xx, yy, r0, 0, 7); ctx.fill(); }
       } else if (e.kind === "linhas") {
         for (var y2 = tn + sp; y2 <= h + 0.01; y2 += sp) hline(ctx, e, 0, w, y2);
       }
     } else if (t === "svg") {
       var c = svgImg(e);
       if (c && c.ok) ctx.drawImage(c.img, 0, 0, w, h);
+      else if (c && c.remote && data.editor) { ctx.fillStyle = c.bad ? "#f6e3e3" : "#f3edf7"; rr(ctx, 0, 0, w, h, Math.min(w, h) * 0.2); ctx.fill(); }
     } else if (t === "img") {
       var ci = upImg(e.img);
       if (ci && ci.ok) {
@@ -426,7 +480,7 @@
   function renderPage(ctx, days, pi, pxmm) {
     ctx.setTransform(pxmm, 0, 0, pxmm, 0, 0);
     ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, 148, 210);
-    var side = pi % 2 === 0 ? "frente" : "verso", m = P.models[P.fmt][side];
+    var side = twoS() && pi % 2 === 1 ? "verso" : "frente", m = P.models[P.fmt][side];
     if (P.fmt === 2) {
       for (var j = 0; j < 2; j++) {
         var d = days[pi * 2 + j];
@@ -532,7 +586,7 @@
       var m = M(), k = scale * (cv._dpr || 1);
       cx.setTransform(1, 0, 0, 1, 0, 0); cx.clearRect(0, 0, cv.width, cv.height);
       cx.setTransform(k, 0, 0, k, 0, 0);
-      drawModel(cx, m, { date: SAMPLE, hol: "", sample: true, skip: ST.editId });
+      drawModel(cx, m, { date: SAMPLE, hol: "", sample: true, skip: ST.editId, editor: true });
       var list = selAll();
       if (list.length > 1) {
         cx.save(); cx.strokeStyle = "#8B3DFF"; cx.lineWidth = 1.5 / scale; cx.setLineDash([4 / scale, 3 / scale]);
@@ -832,11 +886,11 @@
   ied.addEventListener("keydown", function (ev) { var e = byId(ST.editId); if (ev.key === "Escape" || (ev.key === "Enter" && e && e.type === "footer")) { ev.preventDefault(); endEdit(true); } });
 
   /* ---------------- Ações sobre a seleção ---------------- */
-  var STYLE_KEYS = ["font", "size", "color", "tColor", "bold", "italic", "align", "lineColor", "lineStyle", "lineW", "boxBg", "boxBorder", "boxColor", "op", "c1", "c2", "ls", "lh", "bw", "bc"];
+  var STYLE_KEYS = ["font", "size", "color", "tColor", "bold", "italic", "align", "lineColor", "lineStyle", "lineW", "boxBg", "boxBorder", "boxColor", "op", "c1", "c2", "c3", "c4", "ls", "lh", "tgap", "bw", "bc"];
   var TEXTISH = { text: 1, footer: 1, date: 1, holiday: 1, hours: 1, tasks: 1, notes: 1 };
   function styleOk(x, k, from) {
     if (k === "op") return true;
-    if (k === "c1" || k === "c2") return x.type === "svg" && from === "svg";
+    if (CKEYS.indexOf(k) > -1) return x.type === "svg" && from === "svg" && colorKeys(x).indexOf(k) > -1;
     if (k === "bw" || k === "bc") return x.type === "img";
     return !!TEXTISH[x.type] && !!TEXTISH[from];
   }
@@ -996,33 +1050,82 @@
     place(e);
   }
   function addSvg(id) {
-    var it = EL.byId[id], a = EL.aspect(id), m = M(), base = it.stretch && a > 2.5 ? 90 : 34;
+    var it = EL.byId[id], a = EL.aspect(id), m = M(), base = it.stretch && a > 2.5 ? 90 : it.remote ? 36 : 34;
+    if (!it.stretch && a > 2.5) base = 80;
     if (m.h < 150) base *= 0.7;
     var w = a >= 1 ? base : base * a, h = a >= 1 ? base / a : base;
     if (h > m.h * 0.9) { h = m.h * 0.9; w = h * a; }
+    if (w > m.w * 0.9) { w = m.w * 0.9; h = w / a; }
+    libRecent(id);
     place(mk("svg", { lib: id, w: r1(w), h: r1(h) }));
     toast("“" + it.name + "” adicionado", 1500);
   }
   function replaceSvg(id) {
     var e = byId(ST.replaceId); if (!e) return;
     var it = EL.byId[id], a = EL.aspect(id), cxm = e.x + e.w / 2, cym = e.y + e.h / 2, size = Math.max(e.w, e.h);
-    e.lib = id; e.c1 = it.c1; e.c2 = it.c2;
+    e.lib = id; setCols(e, it, false);
     if (!it.stretch) { e.w = r1(a >= 1 ? size : size * a); e.h = r1(a >= 1 ? size / a : size); }
     e.x = r1(cxm - e.w / 2); e.y = r1(cym - e.h / 2);
+    libRecent(id);
     ST.replaceId = null; closeSheet(); commit(); draw(); renderUI(); toast("Trocado por “" + it.name + "”", 1500);
   }
-  /* biblioteca */
+  /* ----- biblioteca de elementos (estilo Canva) ----- */
   var libTiles = {};
-  function tileSrc(id) { return libTiles[id] || (libTiles[id] = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(EL.svg(id))); }
-  function renderLib() {
-    var s = $("libSearch"); if (!s) return;
-    var q = s.value.trim(), items = q ? EL.search(q) : EL.list.filter(function (e) { return e.cat === ST.libCat; });
-    $("libCats").innerHTML = EL.cats.map(function (c) { return '<button type="button" data-cat="' + esc(c) + '" class="' + (!q && c === ST.libCat ? "on" : "") + '">' + esc(c) + "</button>"; }).join("");
-    $("libGrid").innerHTML = items.length ? items.map(function (e) {
-      return '<button type="button" data-lib="' + e.id + '" title="' + esc(e.name) + '"><img loading="lazy" alt="" src="' + tileSrc(e.id) + '"><span>' + esc(e.name) + "</span></button>";
-    }).join("") : "<p>Nada encontrado. Tente outra palavra.</p>";
+  function tileSrc(id) {
+    var it = EL.byId[id]; if (it.remote) return it.url;
+    return libTiles[id] || (libTiles[id] = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(EL.svg(id)));
   }
-
+  var RECENT_KEY = "agenda-elementos-recentes";
+  function libRecentList() { var a = []; try { a = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]"); } catch (x) {} return a.filter(function (id) { return EL.byId[id]; }); }
+  function libRecent(id) { var a = libRecentList().filter(function (x) { return x !== id; }); a.unshift(id); try { localStorage.setItem(RECENT_KEY, JSON.stringify(a.slice(0, 24))); } catch (x) {} }
+  var GROUP_TITLES = { "Ilustrações": "Ilustrações coloridas", "Decorados": "Decorados · troque as cores de cada parte", "Básicos": "Básicos e formas · mudam de cor" };
+  function libItems(cat) { return EL.list.filter(function (e) { return e.cats.indexOf(cat) > -1; }); }
+  function tile(e, named) {
+    var wide = EL.aspect(e.id) > 2.4;
+    return '<button type="button" class="lt' + (wide ? " wide" : "") + (e.remote ? " ill" : "") + '" data-lib="' + e.id + '" title="' + esc(e.name) + '" aria-label="' + esc(e.name) + '"><img alt="" data-src="' + esc(tileSrc(e.id)) + '">' + (named ? "<span>" + esc(e.name) + "</span>" : "") + "</button>";
+  }
+  function row(title, items, cat) {
+    return '<section class="lib-row"><div class="lib-rh"><b>' + esc(title) + "</b>" + (cat && items.length > 10 ? '<button type="button" data-libcat="' + esc(cat) + '">Ver tudo ›</button>' : "") + '</div><div class="lib-scroll">' +
+      items.slice(0, 12).map(function (e) { return tile(e); }).join("") + (cat && items.length > 12 ? '<button type="button" class="lt more" data-libcat="' + esc(cat) + '">Ver<br>tudo ›</button>' : "") + "</div></section>";
+  }
+  var libIO = null, libQT;
+  function libLazy() {
+    var root = $("libBody"); if (!root) return;
+    if (libIO) libIO.disconnect();
+    var show = function (im) { if (im && im.dataset.src) { im.src = im.dataset.src; im.removeAttribute("data-src"); } };
+    libIO = new IntersectionObserver(function (ents) {
+      ents.forEach(function (en) {
+        if (!en.isIntersecting) return;
+        var b = en.target; show(b.querySelector("img")); libIO.unobserve(b);
+        /* numa fileira, já carrega os próximos para o deslize ficar suave */
+        if (b.parentNode.classList.contains("lib-scroll")) { var n = b.nextElementSibling, k = 0; while (n && k < 4) { show(n.querySelector("img")); n = n.nextElementSibling; k++; } }
+      });
+    }, { root: body, rootMargin: "250px 0px" });
+    root.querySelectorAll(".lt img[data-src]").forEach(function (im) { libIO.observe(im.parentNode); });
+  }
+  function renderLib() {
+    var s = $("libSearch"), box = $("libBody"); if (!s || !box) return;
+    var q = s.value.trim(), h = "";
+    ST.libQ = s.value;
+    if (q) {
+      var seen = {}, items = EL.search(q).filter(function (e) { return seen[e.id] ? false : (seen[e.id] = 1); });
+      h = items.length ? '<p class="lib-count">' + items.length + " elemento" + (items.length > 1 ? "s" : "") + ' para “' + esc(q) + '”</p><div class="lib-grid">' + items.slice(0, 400).map(function (e) { return tile(e, true); }).join("") + "</div>"
+        : '<p class="lib-empty">Nada encontrado para “' + esc(q) + '”.<br>Tente outra palavra, como flor, coração, café, estrela, natal.</p>';
+    } else if (ST.libView) {
+      var list = ST.libView === "__recentes" ? libRecentList().map(function (id) { return EL.byId[id]; }) : libItems(ST.libView);
+      h = '<div class="lib-head"><button type="button" class="btn" data-libback="1">‹ Voltar</button><b>' + esc(ST.libView === "__recentes" ? "Recentes" : ST.libView) + "</b><span>" + list.length + "</span></div>" +
+        '<div class="lib-grid">' + list.map(function (e) { return tile(e, true); }).join("") + "</div>";
+    } else {
+      var rec = libRecentList();
+      if (rec.length) h += row("Recentes", rec.map(function (id) { return EL.byId[id]; }), rec.length > 12 ? "__recentes" : null);
+      ["Ilustrações", "Decorados", "Básicos"].forEach(function (g) {
+        h += '<h3 class="lib-group">' + esc(GROUP_TITLES[g]) + "</h3>";
+        (EL.groups[g] || []).forEach(function (c) { var it = libItems(c); if (it.length) h += row(c, it, c); });
+      });
+    }
+    box.innerHTML = h;
+    libLazy();
+  }
   /* imagens da usuária */
   function readImage(file) {
     return new Promise(function (res, rej) {
@@ -1111,13 +1214,13 @@
   }
   function applyTpl(i) {
     var t = TPL[i]; if (!t) return;
-    ask("Isso troca o que está na folha. Continuar?", "O modelo “" + t.name + "” vale para a Frente e o Verso. Dá para voltar com ↶ Desfazer.", "Usar modelo").then(function (ok) {
+    ask("Isso troca o que está na folha. Continuar?", "O modelo “" + t.name + "” vale para todas as páginas" + (twoS() ? " (Frente e Verso)" : "") + ". Dá para voltar com ↶ Desfazer.", "Usar modelo").then(function (ok) {
       if (!ok) return;
       var H = P.fmt === 2 ? 105 : 210, f = buildTpl(t, 148, H, "frente"), v = buildTpl(t, 148, H, "verso");
       P.models[P.fmt].frente = f; P.models[P.fmt].verso = v;
       ST.side = "frente"; clearSel(); closeSheet(); syncTop(); commit(); layout(); renderUI();
       ensureAssets([f, v]).then(draw);
-      toast("Modelo “" + t.name + "” na Frente e no Verso · ↶ desfaz", 3500);
+      toast("Modelo “" + t.name + "” aplicado em todas as páginas · ↶ desfaz", 3500);
     });
   }
 
@@ -1137,13 +1240,13 @@
     if (name === "trocar") return t === "svg";
     if (name === "recortar") return t === "img";
     if (name === "virar") return t === "svg" || t === "img";
-    if (name === "cor") return t !== "img";
+    if (name === "cor") return t !== "img" && colorKeys(e).length > 0;
     if (name === "borda") return t !== "svg";
     return true;
   }
   function colorKeys(e) {
     if (!e) return [];
-    if (e.type === "svg") return /\{2\}/.test((EL.byId[e.lib] || {}).svg || "") ? ["c1", "c2"] : ["c1"];
+    if (e.type === "svg") { var it = EL.byId[e.lib]; return !it || it.remote ? [] : CKEYS.slice(0, Math.max(1, it.n)); }
     if (e.type === "img") return [];
     if (e.type === "hours" || e.type === "tasks" || e.type === "notes") return ["color", "tColor", "lineColor"];
     return ["color"];
@@ -1155,9 +1258,8 @@
     closeMenu();
     ST.sheet = name; ST.fontOpen = name === "fonte";
     ST.colorOpen = name === "cor" ? colorKeys(e)[0] : name === "fundo" ? "bg.color" : name === "borda" && e && e.type === "img" ? "bc" : null;
-    if (name === "trocar") { ST.replaceId = e && e.id; ST.libCat = (EL.byId[e.lib] || {}).cat || ST.libCat; }
-    if (name === "elementos") ST.replaceId = null;
-    if ((name === "elementos" || name === "trocar") && !ST.libCat) ST.libCat = EL.cats[0];
+    if (name === "trocar") { ST.replaceId = e && e.id; ST.libView = (EL.byId[e.lib] || {}).cat || null; ST.libQ = ""; }
+    if (name === "elementos") { ST.replaceId = null; ST.libView = null; ST.libQ = ""; }
     sheet.classList.remove("closed"); sheet.classList.toggle("tall", !!TALL[name]); sheet.style.transform = "";
     document.body.classList.add("sheet-open");
     pushBack();
@@ -1213,8 +1315,8 @@
   function swBg(c) { return METAL[c] ? "linear-gradient(135deg," + c + " 0%,#ffffff 45%," + c + " 60%," + c + " 100%)" : c; }
   function up(c) { return (c || "").toUpperCase(); }
   function docColors() {
-    var set = {}, keys = ["color", "tColor", "lineColor", "boxBg", "boxColor", "c1", "c2", "bc"];
-    ["frente", "verso"].forEach(function (sd) { var m = P.models[P.fmt][sd]; if (m.bg.color && up(m.bg.color) !== "#FFFFFF") set[up(m.bg.color)] = 1; m.els.forEach(function (e) { keys.forEach(function (k) { if (e[k] && /^#[0-9a-f]{6}$/i.test(e[k])) set[up(e[k])] = 1; }); }); });
+    var set = {}, keys = ["color", "tColor", "lineColor", "boxBg", "boxColor", "c1", "c2", "c3", "c4", "bc"];
+    usedModels().forEach(function (m) { if (m.bg.color && up(m.bg.color) !== "#FFFFFF") set[up(m.bg.color)] = 1; m.els.forEach(function (e) { keys.forEach(function (k) { if (e[k] && /^#[0-9a-f]{6}$/i.test(e[k])) set[up(e[k])] = 1; }); }); });
     return Object.keys(set).slice(0, 24);
   }
   function addRecent(c) { if (!c) return; c = up(c); P.recent = (P.recent || []).filter(function (x) { return x !== c; }); P.recent.unshift(c); P.recent = P.recent.slice(0, 12); }
@@ -1252,6 +1354,7 @@
     var box = body.querySelector('.picker[data-pk="' + pk + '"]'); if (!box) return;
     box.querySelector(".hexrow .sw").style.background = hex;
     var hx = box.querySelector(".hex"); if (document.activeElement !== hx) hx.value = hex;
+    var pp = body.querySelector('.part[data-ck="' + pk + '"] .sw'); if (pp) pp.style.background = hex;
     var cb = body.querySelector('.colorbtn[data-ck="' + pk + '"]'); if (cb) { cb.querySelector(".sw").style.background = hex; cb.querySelector(".sw").classList.remove("none"); cb.children[1].textContent = hex; }
     setK(pk, hex);
     if (final) { addRecent(hex); commit(); renderCtx(); }
@@ -1282,17 +1385,23 @@
 
   /* conteúdo de cada painel */
   function sheetModelos() {
-    var half = P.fmt === 2, s = '<p class="lbl">Modelos prontos · trocam a Frente e o Verso</p><div class="tpl-grid">';
-    TPL.forEach(function (t, i) { s += '<button type="button" class="tpl' + (half ? " half" : "") + '" data-tpl="' + i + '"><div class="pair"><canvas data-tc="' + i + 'f"></canvas><canvas data-tc="' + i + 'v"></canvas></div>' + esc(t.name) + "</button>"; });
+    var half = P.fmt === 2, tw = twoS(), s = '<p class="lbl">Modelos prontos · valem para todas as páginas</p><div class="tpl-grid' + (tw ? "" : " one") + '">';
+    TPL.forEach(function (t, i) { s += '<button type="button" class="tpl' + (half ? " half" : "") + '" data-tpl="' + i + '"><div class="pair"><canvas data-tc="' + i + 'f"></canvas>' + (tw ? '<canvas data-tc="' + i + 'v"></canvas>' : "") + "</div>" + esc(t.name) + "</button>"; });
     s += "</div>";
-    s += '<p class="lbl">Arrumações rápidas · só na folha aberta (' + (ST.side === "frente" ? "Frente" : "Verso") + ")</p>" + '<div class="opts"><button type="button" class="btn" data-preset="classico">Clássico</button><button type="button" class="btn" data-preset="lateral">Data grande lateral</button><button type="button" class="btn" data-preset="tarefas">Tarefas em cima</button></div>';
-    s += '<p class="lbl">Folha</p><div class="opts"><button type="button" class="btn" data-act="reset">Voltar ao padrão</button><button type="button" class="btn" data-act="copySide">Copiar da outra folha</button><button type="button" class="btn danger" data-act="blank">Começar do zero</button></div>';
+    s += '<p class="lbl">Arrumações rápidas' + (tw ? " · só na folha aberta (" + (ST.side === "frente" ? "Frente" : "Verso") + ")" : "") + "</p>" + '<div class="opts"><button type="button" class="btn" data-preset="classico">Clássico</button><button type="button" class="btn" data-preset="lateral">Data grande lateral</button><button type="button" class="btn" data-preset="tarefas">Tarefas em cima</button></div>';
+    s += '<p class="lbl">Folha</p><div class="opts"><button type="button" class="btn" data-act="reset">Voltar ao padrão</button>' + (tw ? '<button type="button" class="btn" data-act="copySide">Copiar da outra folha</button>' : "") + '<button type="button" class="btn danger" data-act="blank">Começar do zero</button></div>';
     s += '<p class="lbl">Arquivo</p><div class="opts"><button type="button" class="btn" data-act="saveJson">Salvar modelo</button><button type="button" class="btn" data-act="openJson">Abrir modelo</button></div>';
-    return s + '<p class="hint">Seu trabalho fica salvo sozinho neste celular. “Salvar modelo” baixa um arquivo para guardar ou passar para outro aparelho.</p>';
+    s += '<p class="hint">Seu trabalho fica salvo sozinho neste celular. “Salvar modelo” baixa um arquivo para guardar ou passar para outro aparelho.</p>';
+    s += '<details class="adv"' + (tw ? " open" : "") + '><summary>Avançado</summary><label class="switch"><input type="checkbox" data-act="twoSides"' + (tw ? " checked" : "") + '><span>Frente e verso diferentes (avançado)</span></label>' +
+      '<p class="hint">' + (tw ? "Ligado: páginas ímpares usam a Frente e as pares usam o Verso. Escolha a folha nas abas Frente / Verso em cima." : "Desligado: a mesma folha vale para todas as páginas.") + "</p></details>";
+    return s;
   }
   function sheetLib() {
     var s = ST.sheet === "trocar" ? '<p class="hint">Escolha o elemento novo. Ele fica no mesmo lugar.</p>' : "";
-    return s + '<div class="lib-top"><input type="search" id="libSearch" placeholder="Buscar (ex.: coração, café, washi)"></div><div class="lib-cats" id="libCats"></div><div class="lib-grid" id="libGrid"></div>';
+    return s + '<div class="lib-top"><input type="search" id="libSearch" placeholder="Buscar: flor, café, natal, washi…" value="' + esc(ST.libQ || "") + '" enterkeyhint="search" autocomplete="off">' +
+      '<button type="button" class="lib-info" data-act="libInfo" aria-label="Créditos das ilustrações" title="Créditos">i</button></div>' +
+      '<div class="lib-credits" id="libCredits"' + (ST.libInfo ? "" : " hidden") + '><b>Créditos</b><br>Ilustrações coloridas: <b>Microsoft Fluent Emoji</b> © Microsoft, licença MIT (github.com/microsoft/fluentui-emoji), entregues pela jsDelivr. ' +
+      'Na primeira vez elas vêm da internet; depois ficam guardadas no celular e funcionam sem internet.<br>Básicos e Decorados: desenhos próprios da Agenda Estrela.</div><div id="libBody"></div>';
   }
   function sheetTexto() {
     var s = "";
@@ -1351,6 +1460,7 @@
     if (t === "hours") s += F("Jeito do horário", opts("hfmt", e.hfmt, [["h", "07h · 07h30"], [":", "07:00 · 07:30"]])) + '<p class="hint">Quais horários aparecem você escolhe no passo 2. Se forem muitos, vira 2 ou 3 colunas.</p>';
     if (t === "tasks") s += stepper("count", e.count, 1, "Quantas tarefas");
     if (t === "notes") { s += F("Tipo", opts("kind", e.kind, [["linhas", "Linhas"], ["pontilhado", "Pontilhado"], ["branco", "Em branco"]])); if (e.kind !== "branco") s += stepper("spacing", e.spacing, 0.5, "Espaço entre linhas (mm)"); }
+    if (t === "hours" || t === "tasks" || t === "notes") s += range("tgap", e.tgap == null ? 1.2 : e.tgap, 0.5, 4, 0.1, "Espaço entre letras e linhas", "mm");
     if (t === "hours" || t === "tasks" || t === "notes") s += F("Tipo de linha", opts("lineStyle", e.lineStyle, [["solid", "Contínua"], ["tracejada", "Tracejada"], ["pontilhada", "Pontilhada"]])) + stepper("lineW", e.lineW, 0.05, "Espessura da linha (mm)");
     return s;
   }
@@ -1364,7 +1474,16 @@
   }
   function sheetCor(e) {
     var t = e.type, s = "";
-    if (t === "svg") { s += F("Cor principal", pal("c1", e.c1)); if (colorKeys(e).length > 1) s += F("Cor 2", pal("c2", e.c2)); }
+    if (t === "svg") {
+      var ks = colorKeys(e), lb = EL.labels(e.lib);
+      if (ks.length > 1) {
+        if (ks.indexOf(ST.colorOpen) < 0) ST.colorOpen = ks[0];
+        s += '<p class="hint">Toque numa parte e escolha a cor dela.</p><div class="parts">' + ks.map(function (k, i) {
+          return '<button type="button" class="part' + (ST.colorOpen === k ? " on" : "") + '" data-act="partPick" data-ck="' + k + '"><span class="sw" style="background:' + swBg(up(e[k])) + '"></span><span>' + esc(lb[i]) + "</span></button>";
+        }).join("") + "</div>";
+        s += pal(ST.colorOpen, e[ST.colorOpen]);
+      } else s += F(lb[0] || "Cor", pal("c1", e.c1));
+    }
     else s += F(t === "hours" || t === "tasks" || t === "notes" ? "Cor do texto" : "Cor da letra", pal("color", e.color));
     if (t === "hours" || t === "tasks" || t === "notes") { s += F("Cor do título e quadradinhos", pal("tColor", e.tColor)); s += F("Cor das linhas", pal("lineColor", e.lineColor)); }
     return s;
@@ -1415,7 +1534,7 @@
     else if (n === "fonte") h = sheetFonte(e);
     else if (n === "tamanho") h = stepper("size", e.size, 1, "Tamanho da letra (pt)") + range("size", e.size, 4, 96, 0.5, "Arraste para mudar");
     else if (n === "cor") h = sheetCor(e);
-    else if (n === "espaco") h = range("ls", e.ls || 0, -0.1, 0.8, 0.02, "Espaço entre as letras", "x") + (e.type === "text" ? range("lh", e.lh || 1.25, 0.8, 2.5, 0.05, "Espaço entre as linhas", "x") : "");
+    else if (n === "espaco") h = range("ls", e.ls || 0, -0.1, 0.8, 0.02, "Espaço entre as letras", "x") + (e.type === "text" ? range("lh", e.lh || 1.25, 0.8, 2.5, 0.05, "Espaço entre as linhas", "x") : "") + (e.type === "hours" || e.type === "tasks" || e.type === "notes" ? range("tgap", e.tgap == null ? 1.2 : e.tgap, 0.5, 4, 0.1, "Espaço entre letras e linhas", "mm") : "");
     else if (n === "borda") h = sheetBorda(e);
     else if (n === "opac") h = range("op", e.op == null ? 1 : e.op, 0.05, 1, 0.05, "Opacidade (transparência)", "%");
     else if (n === "girar") h = range("rot", e.rot || 0, -180, 180, 1, "Ângulo", "°") + '<div class="opts"><button type="button" class="btn" data-act="rot-90">↺ 90°</button><button type="button" class="btn" data-act="rot0">Reto (0°)</button><button type="button" class="btn" data-act="rot90">↻ 90°</button></div><p class="hint">Na folha, arraste a bolinha ⟳ embaixo do item.</p>';
@@ -1462,7 +1581,8 @@
       if (t === "svg") B("sheet:trocar", "Trocar", "swap");
       if (t === "img") B("sheet:recortar", "Recortar", "crop");
       if (tx) { B("sheet:fonte", "Fonte", "font"); B("sheet:tamanho", "Tamanho", '<span class="ab">' + (Math.round(e.size * 10) / 10) + "</span>"); }
-      if (t !== "img") { var col = t === "svg" ? e.c1 : e.color; B("sheet:cor", "Cor", '<span class="cdot" style="background:' + swBg(up(col)) + '"></span>'); }
+      if (t === "svg") { var cks = colorKeys(e); if (cks.length) B("sheet:cor", "Cor", cks.length > 1 ? '<span class="cdots">' + cks.map(function (k) { return '<i style="background:' + swBg(up(e[k])) + '"></i>'; }).join("") + "</span>" : '<span class="cdot" style="background:' + swBg(up(e.c1)) + '"></span>'); }
+      else if (t !== "img") B("sheet:cor", "Cor", '<span class="cdot" style="background:' + swBg(up(e.color)) + '"></span>');
       if (tx) { B("bold", "Negrito", "bold", e.bold ? "on" : ""); B("italic", "Itálico", "italic", e.italic ? "on" : ""); B("alignTxt", "Alinhamento", "align-" + (e.align || "left")); B("sheet:espaco", "Espaçamento", "spacing"); }
       if (t !== "svg") B("sheet:borda", t === "img" ? "Borda" : "Caixa/Borda", "borda");
       if (t === "text" || t === "footer") B("sheet:ajustes", "Ajustes", "sliders");
@@ -1503,7 +1623,7 @@
   }
   body.addEventListener("input", function (ev) {
     var t = ev.target;
-    if (t.id === "libSearch") { renderLib(); return; }
+    if (t.id === "libSearch") { ST.libQ = t.value; clearTimeout(libQT); libQT = setTimeout(function () { renderLib(); body.scrollTop = 0; }, 160); return; }
     if (t.classList.contains("hue")) { PK.h = +t.value; var bx = t.parentNode; bx.querySelector(".sv").style.backgroundColor = "hsl(" + PK.h + ",100%,50%)"; pickerApply(bx.dataset.pk, hsv2hex(PK.h, PK.s, PK.v)); return; }
     if (t.classList.contains("hex")) { var v0 = t.value.trim(); if (v0[0] !== "#") v0 = "#" + v0; if (/^#[0-9a-f]{6}$/i.test(v0)) { PK = hex2hsv(v0); pickerApply(t.closest(".picker").dataset.pk, up(v0)); } return; }
     if (t.dataset.crop) { var e0 = selEl(); if (!e0) return; var c = Object.assign({ l: 0, t: 0, r: 0, b: 0 }, e0.crop || {}); c[t.dataset.crop] = +t.value; setCrop(e0, c); t.nextElementSibling.textContent = Math.round(+t.value * 100) + "%"; draw(); later(); return; }
@@ -1521,6 +1641,13 @@
   body.addEventListener("change", function (ev) {
     var t = ev.target;
     if (t.dataset.act === "alignMargin") { ST.alignMargin = t.checked; return; }
+    if (t.dataset.act === "twoSides") {
+      var mm = P.models[P.fmt];
+      P.settings.twoSides = t.checked; ST.side = "frente"; clearSel(); ST.multiMode = false;
+      if (t.checked) { mm.verso = clone(mm.frente); mm.verso.els.forEach(function (z) { z.id = uid(); }); }
+      syncTop(); commit(); save(); layout(); renderUI();
+      toast(t.checked ? "Frente e verso diferentes ligado · o Verso começou igual à Frente" : "Uma folha só para todas as páginas", 3500); return;
+    }
     if (t.classList.contains("hue")) { addRecent(hsv2hex(PK.h, PK.s, PK.v)); }
     if (t.classList.contains("hex")) { var v1 = up(t.value.trim()); if (v1[0] !== "#") v1 = "#" + v1; if (/^#[0-9A-F]{6}$/.test(v1)) addRecent(v1); }
     if (t.id === "libSearch") return;
@@ -1530,7 +1657,8 @@
     var b = ev.target.closest("button"); if (!b) return;
     var e = selEl(), m = M();
     if (b.dataset.tpl) { applyTpl(+b.dataset.tpl); return; }
-    if (b.dataset.cat) { ST.libCat = b.dataset.cat; $("libSearch").value = ""; renderLib(); var g = $("libGrid"); if (g) body.scrollTop = 0; return; }
+    if (b.dataset.libcat) { ST.libView = b.dataset.libcat; $("libSearch").value = ""; renderLib(); body.scrollTop = 0; return; }
+    if (b.dataset.libback) { ST.libView = null; renderLib(); body.scrollTop = 0; return; }
     if (b.dataset.lib) { if (ST.sheet === "trocar") replaceSvg(b.dataset.lib); else addSvg(b.dataset.lib); return; }
     if (b.dataset.addtext) { addText(b.dataset.addtext); return; }
     if (b.dataset.add) { addAgenda(b.dataset.add); return; }
@@ -1568,6 +1696,8 @@
     }
     var a = b.dataset.act;
     if (!a) return;
+    if (a === "partPick") { ST.colorOpen = b.dataset.ck; renderUI(); return; }
+    if (a === "libInfo") { ST.libInfo = !ST.libInfo; var cr = $("libCredits"); if (cr) cr.hidden = !ST.libInfo; return; }
     if (a === "colorToggle") { ST.colorOpen = ST.colorOpen === b.dataset.ck ? null : b.dataset.ck; renderUI(); if (ST.colorOpen) { var cbn = body.querySelector('.colorbtn[data-ck="' + ST.colorOpen + '"]'); if (cbn) body.scrollTop = cbn.offsetTop - 8; } return; }
     if (a === "hexOk") { var pkb = b.closest(".picker"), hv = up(pkb.querySelector(".hex").value.trim()); if (hv[0] !== "#") hv = "#" + hv; if (/^#[0-9A-F]{6}$/.test(hv)) { PK = hex2hsv(hv); pickerApply(pkb.dataset.pk, hv, true); renderUI(); } else toast("Código de cor inválido. Ex.: #E88AA6"); return; }
     if (a === "pickImg") { $("fileImg").click(); return; }
@@ -1580,10 +1710,10 @@
       toast("Copiado da " + (ST.side === "frente" ? "folha do Verso" : "Frente")); return;
     }
     if (a === "blank") {
-      ask("Apagar tudo da Frente e do Verso?", "As duas folhas ficam em branco. Dá para voltar com ↶ Desfazer.", "Apagar tudo").then(function (ok) {
+      ask("Apagar tudo da folha?", "A folha fica em branco. Dá para voltar com ↶ Desfazer.", "Apagar tudo").then(function (ok) {
         if (!ok) return;
         ["frente", "verso"].forEach(function (s) { var mm = P.models[P.fmt][s]; mm.els = []; mm.bg = { color: "#FFFFFF", img: null, op: 1 }; });
-        clearSel(); commit(); closeSheet(); draw(); renderUI(); toast("Folhas em branco · ↶ desfaz");
+        clearSel(); commit(); closeSheet(); draw(); renderUI(); toast("Folha em branco · ↶ desfaz");
       }); return;
     }
     if (a === "saveJson") { pruneImages(); downloadBlob(new Blob([JSON.stringify(P)], { type: "application/json" }), "modelo-agenda-estrela.json"); toast("Modelo salvo nos downloads"); return; }
@@ -1627,6 +1757,8 @@
   /* ---------------- Barra de cima (formato, frente/verso) ---------------- */
   function syncTop() {
     $("fmtSel").value = String(P.fmt);
+    if (!twoS()) ST.side = "frente";
+    $("sideSeg").hidden = !twoS();
     document.querySelectorAll("#sideSeg button").forEach(function (b) { b.classList.toggle("on", b.dataset.side === ST.side); });
   }
   $("fmtSel").addEventListener("change", function () { P.fmt = +this.value; clearSel(); closeSheet(); ST.zoom = 1; syncTop(); layout(); renderUI(); commit(); save(); });
@@ -1654,8 +1786,13 @@
     var d = newProject();
     P = Object.assign(d, o); P.settings = Object.assign(d.settings, o.settings || {}); P.images = o.images || {};
     ["1", "2"].forEach(function (f) { P.models[f] = P.models[f] || d.models[f]; ["frente", "verso"].forEach(function (s) { var m = P.models[f][s] = P.models[f][s] || d.models[f][s]; m.bg = Object.assign({ color: "#FFFFFF", img: null, op: 1 }, m.bg || {}); m.els = (m.els || []).map(function (e) { return Object.assign({}, DEF.base, DEF[e.type] || {}, e); }); }); });
+    /* projeto antigo (v3) sem a opção: se Frente e Verso eram diferentes, liga "Frente e verso diferentes" para não perder o Verso */
+    if (!o.settings || o.settings.twoSides == null) {
+      var sig = function (m) { return JSON.stringify({ bg: m.bg, els: m.els.map(function (e) { var c = Object.assign({}, e); delete c.id; delete c.grp; return c; }) }); };
+      P.settings.twoSides = ["1", "2"].some(function (f) { return sig(P.models[f].frente) !== sig(P.models[f].verso); });
+    }
     imgCache = {}; clearSel(); tplCache = {};
-    syncTop(); syncS2(); layout(); renderUI(); ensureFonts([P.models[P.fmt].frente, P.models[P.fmt].verso]).then(draw);
+    syncTop(); syncS2(); layout(); renderUI(); ensureFonts(usedModels()).then(draw);
   }
 
   /* ---------------- Passos ---------------- */
@@ -1732,7 +1869,7 @@
     $("btnMore").textContent = "Mostrar mais páginas (vendo " + lim + " de " + pages + ")";
     var have = box.children.length;
     if (have > lim) { box.innerHTML = ""; have = 0; }
-    var models = [P.models[P.fmt].frente, P.models[P.fmt].verso];
+    var models = usedModels();
     ensureAssets(models).then(function () {
       var i = have;
       function next() {
@@ -1743,7 +1880,7 @@
         c.width = Math.round(148 * pxmm); c.height = Math.round(210 * pxmm);
         renderPage(c.getContext("2d"), days, i, pxmm);
         wrapD.innerHTML = ""; wrapD.appendChild(c);
-        var sp = document.createElement("span"); sp.textContent = "Página " + (i + 1) + " · " + (i % 2 ? "Verso" : "Frente"); wrapD.appendChild(sp);
+        var sp = document.createElement("span"); sp.textContent = "Página " + (i + 1) + (twoS() ? " · " + (i % 2 ? "Verso" : "Frente") : ""); wrapD.appendChild(sp);
         i++; setTimeout(next, 0);
       }
       next();
@@ -1771,7 +1908,11 @@
       renderPage(ctx, days, i, pxmm);
       return canvasJpeg(c, 0.92).then(function (b) { return onPage(b, i, pages); }).then(function () { i++; return sleep(0).then(step); });
     }
-    return ensureAssets([P.models[P.fmt].frente, P.models[P.fmt].verso]).then(step).then(function (ok) { c.width = c.height = 1; return { ok: ok, days: days }; });
+    var mods = usedModels();
+    return ensureAssets(mods).then(function () {
+      var miss = 0; mods.forEach(function (m) { m.els.forEach(function (e) { if (e.type === "svg" && (EL.byId[e.lib] || {}).remote) { var c = svgCache[svgKey(e)]; if (!c || !c.ok) miss++; } }); });
+      if (miss) toast("Atenção: " + miss + " ilustração(ões) não carregou(aram) — confira a internet. Elas vão faltar nas folhas.", 6000);
+    }).then(step).then(function (ok) { c.width = c.height = 1; return { ok: ok, days: days }; });
   }
   window.__agendaPdf = function () { return makePdf(true); };
   function makePdf(returnBlob) {
@@ -1826,11 +1967,12 @@
     else loadProject(newProject());
     hist = [snap()]; hi = 0; undoBtns();
     go(1); savedUI(0); maybeTips();
-    ensureFonts([P.models[P.fmt].frente, P.models[P.fmt].verso]).then(function () { draw(); });
+    ensureFonts(usedModels()).then(function () { draw(); });
   }
   idbGet("project").then(function (v) { boot(v || localStorage.getItem("agenda-estrela")); }).catch(function () { boot(localStorage.getItem("agenda-estrela")); });
   window.addEventListener("pagehide", function () { pruneImages(); try { idbSet("project", JSON.stringify(P)); } catch (x) {} });
 
   if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(function () {});
-  window.__agenda = { P: function () { return P; }, ST: ST, go: go, M: M, layout: layout, scale: function () { return scale; }, selAll: selAll, TPL: TPL, applyTplNow: function (i) { var t = TPL[i], H = P.fmt === 2 ? 105 : 210; P.models[P.fmt].frente = buildTpl(t, 148, H, "frente"); P.models[P.fmt].verso = buildTpl(t, 148, H, "verso"); clearSel(); commit(); layout(); renderUI(); } };
+  window.__agendaDbg = function (v) { DBG = v; };
+  window.__agenda = { renderPage: function (ctx, days, i, pxmm) { renderPage(ctx, days, i, pxmm); }, dayList: function () { return dayList(); }, ensureAssets: function () { return ensureAssets(usedModels()); }, buildTpl: buildTpl, P: function () { return P; }, ST: ST, go: go, M: M, layout: layout, scale: function () { return scale; }, selAll: selAll, TPL: TPL, applyTplNow: function (i) { var t = TPL[i], H = P.fmt === 2 ? 105 : 210; P.models[P.fmt].frente = buildTpl(t, 148, H, "frente"); P.models[P.fmt].verso = buildTpl(t, 148, H, "verso"); clearSel(); commit(); layout(); renderUI(); } };
 })();

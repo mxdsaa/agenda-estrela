@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,400;0,700;1,400;1,700&display=swap">
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
 <header class="top">
@@ -26,7 +26,7 @@
     <button type="button" class="ur" id="btnRedo" aria-label="Refazer" title="Refazer"><svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
   </div>
   <nav class="steps" id="steps">
-    <button type="button" data-step="1" class="on"><b>1</b><span>Frente e Verso</span></button>
+    <button type="button" data-step="1" class="on"><b>1</b><span>Monte sua folha</span></button>
     <button type="button" data-step="2"><b>2</b><span>Ano</span></button>
     <button type="button" data-step="3"><b>3</b><span>Baixar PDF</span></button>
   </nav>
@@ -36,7 +36,7 @@
   <!-- PASSO 1 -->
   <section id="step1" class="step">
     <div class="bar row1">
-      <div class="seg big" id="sideSeg">
+      <div class="seg big" id="sideSeg" hidden>
         <button type="button" data-side="frente" class="on">Frente</button>
         <button type="button" data-side="verso">Verso</button>
       </div>
@@ -157,7 +157,7 @@
         </select></label>
         <button type="button" class="btn" id="btnPrint">🖨 Imprimir</button>
       </div>
-      <p class="hint">Páginas ímpares usam a Frente e páginas pares usam o Verso. Imprima em papel A5, frente e verso.</p>
+      <p class="hint">Todas as páginas usam a folha que você montou; só a data, o feriado e os horários mudam em cada uma. Imprima em papel A5.</p>
     </div>
     <div class="pages" id="pages"></div>
     <div class="next"><button type="button" class="btn wide" id="btnMore">Mostrar mais páginas</button></div>
@@ -173,8 +173,10 @@
 <div class="toast" id="toast" hidden></div>
 
 <script src="jspdf.umd.min.js"></script>
-<script src="elements.js?v=3"></script>
-<script src="templates.js?v=3"></script>
-<script src="app.js?v=3"></script>
+<script src="elements.js?v=4"></script>
+<script src="decor.js?v=4"></script>
+<script src="stickers.js?v=4"></script>
+<script src="templates.js?v=4"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>
