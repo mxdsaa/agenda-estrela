@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Agenda Estrela</title>
+<meta name="theme-color" content="#E88AA6">
+<meta name="description" content="Monte e baixe as folhas da sua agenda A5.">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Agenda Estrela">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,400;0,700;1,400;1,700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><img src="icon-192.png" alt="" width="32" height="32"><span>Agenda Estrela</span></div>
+  <nav class="steps" id="steps">
+    <button type="button" data-step="1" class="on"><b>1</b><span>Frente e Verso</span></button>
+    <button type="button" data-step="2"><b>2</b><span>Ano</span></button>
+    <button type="button" data-step="3"><b>3</b><span>Baixar PDF</span></button>
+  </nav>
+</header>
+
+<main>
+  <!-- PASSO 1 -->
+  <section id="step1" class="step">
+    <div class="bar row1">
+      <div class="seg big" id="sideSeg">
+        <button type="button" data-side="frente" class="on">Frente</button>
+        <button type="button" data-side="verso">Verso</button>
+      </div>
+      <select id="fmtSel" aria-label="Formato">
+        <option value="1">1 dia por página</option>
+        <option value="2">2 dias por página</option>
+      </select>
+    </div>
+    <details class="box" id="modelsBox">
+      <summary>Modelos prontos e arquivo ▾</summary>
+      <div class="inner">
+        <p class="lbl">Modelos prontos (vale para a folha que está aberta)</p>
+        <div class="row wrap" id="presets">
+          <button type="button" class="btn" data-preset="classico">Clássico</button>
+          <button type="button" class="btn" data-preset="lateral">Data grande lateral</button>
+          <button type="button" class="btn" data-preset="tarefas">Tarefas em cima</button>
+        </div>
+        <div class="row wrap">
+          <button type="button" class="btn" id="btnReset">Voltar ao padrão</button>
+          <button type="button" class="btn" id="btnCopySide">Copiar da outra folha</button>
+          <button type="button" class="btn danger" id="btnBlank">Começar do zero</button>
+        </div>
+        <p class="lbl">Arquivo</p>
+        <div class="row wrap">
+          <button type="button" class="btn" id="btnSaveJson">Salvar modelo</button>
+          <label class="btn">Abrir modelo<input type="file" id="fileJson" accept=".json,application/json" hidden></label>
+        </div>
+        <p class="hint">Seu trabalho fica salvo sozinho neste celular. “Salvar modelo” baixa um arquivo para guardar ou passar para outro aparelho.</p>
+      </div>
+    </details>
+
+    <div class="addbar" id="addbar">
+      <button type="button" class="hl" id="btnLib">✿ Elementos</button>
+      <label class="addimg hl2">🖼 Carregar mídia<input type="file" id="fileImg" accept="image/*" multiple hidden></label>
+      <button type="button" data-add="text">+ Texto</button>
+      <button type="button" data-add="date">+ Data</button>
+      <button type="button" data-add="hours">+ Horários</button>
+      <button type="button" data-add="tasks">+ Tarefas</button>
+      <button type="button" data-add="notes">+ Anotações</button>
+      <button type="button" data-add="holiday">+ Feriado</button>
+      <button type="button" data-add="footer">+ Rodapé</button>
+      <button type="button" data-add="shape">+ Forma</button>
+      <label class="addimg">Fundo da folha<input type="file" id="fileBg" accept="image/*" hidden></label>
+    </div>
+    <div class="lib" id="libPanel" hidden>
+      <div class="lib-top">
+        <input type="search" id="libSearch" placeholder="Buscar elemento (ex.: coração, café, washi)">
+        <button type="button" class="btn" id="libClose">Fechar</button>
+      </div>
+      <div class="lib-cats" id="libCats"></div>
+      <div class="lib-grid" id="libGrid"></div>
+    </div>
+
+    <div class="tools">
+      <button type="button" class="ic" id="btnUndo" aria-label="Desfazer">↶<small>Desfazer</small></button>
+      <button type="button" class="ic" id="btnRedo" aria-label="Refazer">↷<small>Refazer</small></button>
+      <span class="sp"></span>
+      <button type="button" class="nextsm" data-go="2">Próximo ›</button>
+      <button type="button" class="ic" id="zOut" aria-label="Diminuir zoom">−</button>
+      <button type="button" class="zl" id="zFit">100%</button>
+      <button type="button" class="ic" id="zIn" aria-label="Aumentar zoom">+</button>
+    </div>
+
+    <div class="stage-wrap" id="stageWrap">
+      <div class="stage" id="stage">
+        <canvas id="cv"></canvas>
+        <div class="sel" id="sel" hidden>
+          <div class="h h-rot" data-h="rot" title="Girar">⟳</div>
+          <div class="h h-res" data-h="res" title="Tamanho">⤡</div>
+        </div>
+      </div>
+    </div>
+    <!-- Painel de edição (celular) -->
+<div class="sheet" id="sheet">
+  <div class="sheet-head">
+    <button type="button" class="grab" id="sheetToggle" aria-label="Abrir ou fechar painel"><span></span></button>
+    <div class="sheet-row"><div class="sheet-title" id="sheetTitle">Folha</div><button type="button" class="okbtn" id="btnDone">✓ Pronto</button></div>
+    <div class="tabs" id="tabs">
+      <button type="button" data-tab="texto" class="on">Texto</button>
+      <button type="button" data-tab="cor">Cor</button>
+      <button type="button" data-tab="pos">Posição</button>
+      <button type="button" data-tab="camadas">Camadas</button>
+    </div>
+  </div>
+  <div class="sheet-body" id="sheetBody"></div>
+</div>
+
+  </section>
+
+  <!-- PASSO 2 -->
+  <section id="step2" class="step" hidden>
+    <div class="card">
+      <h2>Ano da agenda</h2>
+      <div class="years" id="years"></div>
+      <div class="dates">
+        <label>Começa em<input type="date" id="d1"></label>
+        <label>Termina em<input type="date" id="d2"></label>
+      </div>
+      <p class="count" id="count"></p>
+    </div>
+    <div class="card">
+      <h2>Feriados</h2>
+      <label class="switch"><input type="checkbox" id="hol"><span>Mostrar feriados nacionais</span></label>
+      <p class="hint">Carnaval, Sexta-feira Santa, Tiradentes, Dia do Trabalho, Corpus Christi, Independência, N. Sra. Aparecida, Finados, Proclamação da República, Consciência Negra, Natal e Ano Novo. O nome aparece no item “Feriado” da folha.</p>
+      <label class="switch"><input type="checkbox" id="cutLine"><span>Linha de corte no meio (2 dias por página)</span></label>
+    </div>
+    <div class="card">
+      <h2>Horários</h2>
+      <button type="button" class="drop" id="hBtn"></button>
+      <div id="hPanel" hidden>
+        <div class="dates three">
+          <label>Das<select id="hDe"></select></label>
+          <label>Até<select id="hAte"></select></label>
+          <label>Intervalo<select id="hIv"><option value="60">1 hora</option><option value="30">30 min</option></select></label>
+        </div>
+        <button type="button" class="btn wide" id="hFill">Preencher</button>
+        <div class="row wrap">
+          <button type="button" class="btn" id="hAll">Marcar todos</button>
+          <button type="button" class="btn" id="hNone">Limpar</button>
+          <button type="button" class="btn" id="hFull">Só horas cheias</button>
+        </div>
+        <div class="chips" id="hChips"></div>
+        <div class="row">
+          <label class="grow">Outro horário<input type="time" id="hOut" step="60"></label>
+          <button type="button" class="btn" id="hAdd">Adicionar</button>
+        </div>
+      </div>
+    </div>
+    <div class="next two">
+      <button type="button" class="btn" data-go="1">← Voltar</button>
+      <button type="button" class="primary" data-go="3">Próximo: baixar →</button>
+    </div>
+  </section>
+
+  <!-- PASSO 3 -->
+  <section id="step3" class="step" hidden>
+    <div class="card">
+      <h2 id="sumTitle">Sua agenda</h2>
+      <p class="count" id="sum"></p>
+      <button type="button" class="primary huge" id="btnPdf">⬇ Baixar PDF</button>
+      <div class="prog" id="prog" hidden>
+        <div class="pbar"><i id="pbarFill"></i></div>
+        <p id="progTxt">Gerando PDF…</p>
+        <button type="button" class="btn" id="btnCancel">Cancelar</button>
+      </div>
+      <div class="row wrap">
+        <label class="grow">Qualidade<select id="quality">
+          <option value="150">Normal (arquivo menor)</option>
+          <option value="200">Alta (arquivo maior)</option>
+        </select></label>
+        <button type="button" class="btn" id="btnPrint">🖨 Imprimir</button>
+      </div>
+      <p class="hint">Páginas ímpares usam a Frente e páginas pares usam o Verso. Imprima em papel A5, frente e verso.</p>
+    </div>
+    <div class="pages" id="pages"></div>
+    <div class="next"><button type="button" class="btn wide" id="btnMore">Mostrar mais páginas</button></div>
+    <div class="next"><button type="button" class="btn" data-go="2">← Voltar</button></div>
+  </section>
+</main>
+
+<div class="print-area" id="printArea"></div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="jspdf.umd.min.js"></script>
+<script src="elements.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
