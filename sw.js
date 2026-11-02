@@ -1,5 +1,5 @@
 /* Agenda Estrela — funciona sem internet depois da primeira visita */
-var V = "agenda-estrela-v1";
+var V = "agenda-estrela-v2";
 var SHELL = ["./", "index.html", "style.css", "app.js", "elements.js", "jspdf.umd.min.js", "manifest.json", "icon-192.png", "icon-512.png", "apple-touch-icon.png"];
 self.addEventListener("install", function (e) { e.waitUntil(caches.open(V).then(function (c) { return c.addAll(SHELL); }).then(function () { return self.skipWaiting(); })); });
 self.addEventListener("activate", function (e) {

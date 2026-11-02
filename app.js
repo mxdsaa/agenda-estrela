@@ -483,6 +483,7 @@
     var n = Object.keys(ptrs).length;
     if (n === 2) {
       if (G && G.moved && G.orig) { Object.assign(G.el, G.orig); }
+      if (G && G.mode === "drag" && G.opened) { ST.sel = G.prevSel; renderPanel(); }
       var mid = pmid(), mm = toMm(mid);
       G = { mode: "pinch", d0: pdist(), z0: ST.zoom, mm: mm };
       return;
@@ -494,9 +495,9 @@
     } else {
       var t = hit(p);
       if (t) {
-        var changed = ST.sel !== t.id;
+        var changed = ST.sel !== t.id, prevSel = ST.sel;
         ST.sel = t.id; if (changed) renderPanel();
-        G = { mode: "drag", el: t, orig: { x: t.x, y: t.y }, p0: p, moved: false, opened: changed };
+        G = { mode: "drag", el: t, orig: { x: t.x, y: t.y }, p0: p, moved: false, opened: changed, prevSel: prevSel };
         updSel();
       } else {
         G = { mode: "pan", sx: wrapEl.scrollLeft, sy: wrapEl.scrollTop, c0: { x: ev.clientX, y: ev.clientY }, moved: false };
